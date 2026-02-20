@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Emoji Catcher</title>
+
+<style>
+:root { --scale: 1; }
+
+body {
+  font-family: Arial, sans-serif;
+  background: #ececec;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+#titleScreen { margin-top: 40px; }
+
+button {
+  padding: 12px 20px;
+  font-size: 16px;
+  margin: 6px;
+  cursor: pointer;
+}
+
+#hud {
+  font-size: calc(18px * var(--scale));
+  display: none;
+}
+
+/* ---------- HOW TO PLAY ---------- */
+#howToPlay {
+  max-width: 520px;
+  margin: 20px auto;
+  background: white;
+  border: 2px solid black;
+  padding: 12px;
+  text-align: left;
+}
+
+#howHeader {
+  cursor: pointer;
+  user-select: none;
+}
+
+#howContent {
+  display: none;
+}
+
+#howContent ul {
+  padding-left: 20px;
+}
+
+#demoBox {
+  margin-top: 10px;
+  height: 80px;
+  border: 1px dashed #888;
+  position: relative;
+  overflow: hidden;
+}
+
+#demoEmoji {
+  position: absolute;
+  font-size: 30px;
+  animation: demoMove 3s infinite;
+}
+
+@keyframes demoMove {
+  0% { left: 10px; top: 20px; }
+  40% { left: 150px; top: 20px; }
+  60% { transform: scale(1.2); }
+  100% { left: 10px; top: 20px; transform: scale(1); }
+}
+
+/* ---------- GAME ---------- */
+#gameWrapper {
+  width: 500px;
+  height: 500px;
+  max-width: 95vw;
+  max-height: 95vw;
+  margin: 20px auto;
+}
+
+#gameArea {
+  width: 100%;
+  height: 100%;
+  background: white;
+  border: 4px solid black;
+  position: relative;
+  display: none;
+  overflow: hidden;
+}
+
+#square, #powerUp {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+#square {
+  width: calc(60px * var(--scale));
+  height: calc(60px * var(--scale));
+  font-size: calc(40px * var(--scale));
+}
+
+#powerUp {
+  width: calc(50px * var(--scale));
+  height: calc(50px * var(--scale));
+  font-size: calc(36px * var(--scale));
+  display: none;
+}
+
+#comboPopup {
+  position: absolute;
+  font-size: calc(24px * var(--scale));
+  font-weight: bold;
+  color: red;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+}
+</style>
+</head>
+<body>
+
+<div id="titleScreen">
+  <h1>🎯 Emoji Catcher</h1>
+  <p>Click the emoji before it escapes!</p>
+
+  <h3>Select Difficulty</h3>
+  <button onclick="startGame('easy')">Easy</button>
+  <button onclick="startGame('medium')">Medium</button>
+  <button onclick="startGame('hard')">Hard</button>
+
+  <p>🏆 High Score: <span id="highScore">0</span></p>
+
+  <!-- HOW TO PLAY -->
+  <div id="howToPlay">
+    <h3 id="howHeader" onclick="toggleHow()">📘 How to Play ▼</h3>
+    <div id="howContent">
+      <ul>
+        <li>🎯 Click the moving emoji to score points</li>
+        <li>⚡ Click quickly to build combos and earn bonuses</li>
+        <li>⭐ Click stars to get extra points and slow the emoji</li>
+        <li>📈 Every 5 points = next level (faster!)</li>
+        <li>⏸ Pause anytime if you need a break</li>
+        <li>🖥 Fullscreen gives the best experience</li>
+        <li>🏆 Beat your high score!</li>
+      </ul>
+
+      <strong>🎥 Quick Demo:</strong>
+      <div id="demoBox">
+        <div id="demoEmoji">😀</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+  Score: <span id="score">0</span> |
+  Level: <span id="level">1</span> |
+  Time: <span id="time">20</span><br><br>
+  <button onclick="togglePause()">⏸ Pause</button>
+  <button onclick="toggleFullscreen()">🖥 Fullscreen</button>
+</div>
+
+<div id="gameWrapper">
+  <div id="gameArea">
+    <div id="square"></div>
+    <div id="powerUp">⭐</div>
+    <div id="comboPopup"></div>
+  </div>
+</div>
+
+<script>
+const emojis=["😀","😎","🤖","👾","🐸","🐱","🐵","🦄","🍕","🚀","🎮"];
+let score=0,level=1,timeLeft=20,moveSpeed=1000;
+let gameTimer,moveTimer,paused=false,gameRunning=false;
+let lastClickTime=0,comboCount=0;
+
+const gameArea=document.getElementById("gameArea");
+const square=document.getElementById("square");
+const powerUp=document.getElementById("powerUp");
+const comboPopup=document.getElementById("comboPopup");
+const titleScreen=document.getElementById("titleScreen");
+const hud=document.getElementById("hud");
+const scoreSpan=document.getElementById("score");
+const levelSpan=document.getElementById("level");
+const timeSpan=document.getElementById("time");
+const highScoreSpan=document.getElementById("highScore");
+
+let highScore=localStorage.getItem("emojiHighScore")||0;
+highScoreSpan.textContent=highScore;
+
+/* SCALE */
+function updateScale(){
+  const scale=Math.min(window.innerWidth,window.innerHeight)/500;
+  document.documentElement.style.setProperty("--scale",Math.min(scale,1.6));
+}
+window.addEventListener("resize",updateScale);
+updateScale();
+
+/* HOW TO TOGGLE */
+function toggleHow(){
+  const content=document.getElementById("howContent");
+  const header=document.getElementById("howHeader");
+  const open=content.style.display==="block";
+  content.style.display=open?"none":"block";
+  header.textContent=open?"📘 How to Play ▼":"📘 How to Play ▲";
+}
+
+/* GAME LOGIC */
+function randomPos(el){
+  el.style.left=Math.random()*(gameArea.clientWidth-el.offsetWidth)+"px";
+  el.style.top=Math.random()*(gameArea.clientHeight-el.offsetHeight)+"px";
+}
+
+square.onclick=()=>{
+  if(!gameRunning||paused) return;
+  const now=Date.now();
+  comboCount=(now-lastClickTime<1200)?comboCount+1:0;
+  lastClickTime=now;
+
+  score+=1+comboCount;
+  scoreSpan.textContent=score;
+
+  if(comboCount>0){
+    comboPopup.textContent="+"+comboCount;
+    comboPopup.style.left=square.offsetLeft+"px";
+    comboPopup.style.top=(square.offsetTop-20)+"px";
+    comboPopup.style.opacity=1;
+    setTimeout(()=>comboPopup.style.opacity=0,50);
+  }
+
+  if(score%5===0){
+    level++;
+    levelSpan.textContent=level;
+    moveSpeed=Math.max(200,moveSpeed-100);
+  }
+
+  randomPos(square);
+  if(Math.random()<0.25) spawnPowerUp();
+};
+
+function spawnPowerUp(){
+  powerUp.style.display="flex";
+  randomPos(powerUp);
+  setTimeout(()=>powerUp.style.display="none",3000);
+}
+
+powerUp.onclick=()=>{
+  score+=3;
+  scoreSpan.textContent=score;
+  powerUp.style.display="none";
+};
+
+function startGame(diff){
+  score=0;level=1;timeLeft=20;comboCount=0;
+  moveSpeed=diff==="easy"?1200:diff==="medium"?900:650;
+  square.textContent=emojis[Math.floor(Math.random()*emojis.length)];
+  scoreSpan.textContent=score;
+  levelSpan.textContent=level;
+  timeSpan.textContent=timeLeft;
+
+  titleScreen.style.display="none";
+  gameArea.style.display="block";
+  hud.style.display="block";
+  gameRunning=true;
+
+  randomPos(square);
+  moveTimer=setInterval(()=>randomPos(square),moveSpeed);
+  gameTimer=setInterval(()=>{
+    if(!paused){
+      timeLeft--;
+      timeSpan.textContent=timeLeft;
+      if(timeLeft<=0) endGame();
+    }
+  },1000);
+}
+
+function togglePause(){
+  paused=!paused;
+  paused?clearInterval(moveTimer):moveTimer=setInterval(()=>randomPos(square),moveSpeed);
+}
+
+function toggleFullscreen(){
+  if(!document.fullscreenElement) gameArea.requestFullscreen();
+  else document.exitFullscreen();
+}
+
+function endGame(){
+  clearInterval(moveTimer);
+  clearInterval(gameTimer);
+  gameRunning=false;
+  gameArea.style.display="none";
+  hud.style.display="none";
+  titleScreen.style.display="block";
+
+  if(score>highScore){
+    highScore=score;
+    localStorage.setItem("emojiHighScore",score);
+    highScoreSpan.textContent=score;
+    alert("🏆 New High Score!");
+  } else alert("Game Over! Score: "+score);
+}
+</script>
+</body>
+</html>
